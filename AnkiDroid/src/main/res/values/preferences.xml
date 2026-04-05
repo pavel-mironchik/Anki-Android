@@ -228,6 +228,12 @@
     <string name="pref_lock_database_key">debug_lock_database</string>
     <string name="pref_corrupt_fsrs_params">debug_corrupt_fsrs_params</string>
     <string name="pref_write_current_partial_anki_day_json_key">writeCurrentPartialAnkiDayJson</string>
+    <string name="pref_upload_current_partial_anki_day_forced_command_key">uploadCurrentPartialAnkiDayForcedCommand</string>
+    <string name="pref_forced_command_ssh_host_key">forcedCommandSshHost</string>
+    <string name="pref_forced_command_ssh_port_key">forcedCommandSshPort</string>
+    <string name="pref_forced_command_ssh_username_key">forcedCommandSshUsername</string>
+    <string name="pref_forced_command_ssh_known_hosts_key">forcedCommandSshKnownHosts</string>
+    <string name="pref_forced_command_ssh_private_key_pem_key">forcedCommandSshPrivateKeyPem</string>
     <string name="pref_write_last_non_empty_completed_anki_day_json_key">writeLastNonEmptyCompletedAnkiDayJson</string>
     <string name="pref_write_previous_completed_anki_day_json_key">writePreviousCompletedAnkiDayJson</string>
     <string name="new_congrats_screen_pref_key">new_congrats_screen</string>

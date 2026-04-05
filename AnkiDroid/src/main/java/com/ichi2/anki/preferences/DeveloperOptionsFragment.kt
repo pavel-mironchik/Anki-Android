@@ -16,9 +16,12 @@
 package com.ichi2.anki.preferences
 
 import android.content.ActivityNotFoundException
+import android.graphics.Typeface
+import android.text.InputType
 import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.edit
+import androidx.preference.EditTextPreference
 import androidx.preference.Preference
 import androidx.preference.SwitchPreferenceCompat
 import com.ichi2.anki.AnkiDroidApp
@@ -31,6 +34,10 @@ import com.ichi2.anki.analytics.UsageAnalytics
 import com.ichi2.anki.dailyprogress.AnkiDayExport
 import com.ichi2.anki.dailyprogress.AnkiDayJsonFileSink
 import com.ichi2.anki.dailyprogress.AnkiDaySnapshotBuilder
+import com.ichi2.anki.dailyprogress.AnkiDaySnapshotPayloadRenderer
+import com.ichi2.anki.dailyprogress.ForcedCommandSshAnkiDayUploadSink
+import com.ichi2.anki.dailyprogress.ForcedCommandSshUploadConfigProvider
+import com.ichi2.anki.dailyprogress.ForcedCommandSshUploadException
 import com.ichi2.anki.dailyprogress.PreviousCompletedAnkiDayExport
 import com.ichi2.anki.dailyprogress.PreviousCompletedAnkiDayJsonFileSink
 import com.ichi2.anki.dailyprogress.PreviousCompletedAnkiDaySnapshotBuilder
@@ -63,6 +70,7 @@ class DeveloperOptionsFragment : SettingsFragment() {
 
     override fun initSubscreen() {
         setupEnableDeveloperOptions()
+        setupForcedCommandUploadPreferences()
         // Make it possible to test crash reporting
         requirePreference<Preference>(R.string.pref_trigger_crash_key).setOnPreferenceClickListener {
             // If we don't delete the limiter data, our test crash may not go through,
@@ -134,6 +142,24 @@ class DeveloperOptionsFragment : SettingsFragment() {
                     } catch (_: ActivityNotFoundException) {
                         showSnackbar("JSON written to ${exportedFile.absolutePath}")
                     }
+                }
+            }
+            false
+        }
+        requirePreference<Preference>(R.string.pref_upload_current_partial_anki_day_forced_command_key).setOnPreferenceClickListener {
+            launchCatchingTask(
+                errorMessage = "Forced-command SSH upload failed",
+                skipCrashReport = { exception -> exception is ForcedCommandSshUploadException },
+            ) {
+                withProgress("Uploading current partial Anki-day JSON over SSH") {
+                    val snapshot = withCol { AnkiDaySnapshotBuilder().buildCurrentPartial(this) }
+                    val payload = AnkiDaySnapshotPayloadRenderer().render(snapshot)
+                    val config = ForcedCommandSshUploadConfigProvider(requireContext()).loadOrThrow()
+                    val uploadResult =
+                        withContext(Dispatchers.IO) {
+                            ForcedCommandSshAnkiDayUploadSink(config).send(payload)
+                        }
+                    showSnackbar(uploadResult.remoteReceipt)
                 }
             }
             false
@@ -277,6 +303,79 @@ class DeveloperOptionsFragment : SettingsFragment() {
             isVisible = !BuildConfig.DEBUG
             setOnPreferenceChangeListener { isEnabled ->
                 setWebContentsDebuggingEnabled(isEnabled)
+            }
+        }
+    }
+
+    private fun setupForcedCommandUploadPreferences() {
+        requirePreference<EditTextPreference>(R.string.pref_forced_command_ssh_host_key).apply {
+            summaryProvider =
+                Preference.SummaryProvider<EditTextPreference> { preference ->
+                    preference.text?.trim().takeUnless { it.isNullOrEmpty() } ?: "Unset"
+                }
+            setOnBindEditTextListener { editText ->
+                editText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                editText.isSingleLine = true
+            }
+        }
+
+        requirePreference<EditTextPreference>(R.string.pref_forced_command_ssh_port_key).apply {
+            summaryProvider =
+                Preference.SummaryProvider<EditTextPreference> { preference ->
+                    preference.text?.trim().takeUnless { it.isNullOrEmpty() } ?: "22"
+                }
+            setOnBindEditTextListener { editText ->
+                editText.inputType = InputType.TYPE_CLASS_NUMBER
+                editText.isSingleLine = true
+            }
+        }
+
+        requirePreference<EditTextPreference>(R.string.pref_forced_command_ssh_username_key).apply {
+            summaryProvider =
+                Preference.SummaryProvider<EditTextPreference> { preference ->
+                    preference.text?.trim().takeUnless { it.isNullOrEmpty() } ?: "Unset"
+                }
+            setOnBindEditTextListener { editText ->
+                editText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                editText.isSingleLine = true
+            }
+        }
+
+        requirePreference<EditTextPreference>(R.string.pref_forced_command_ssh_known_hosts_key).apply {
+            summaryProvider =
+                Preference.SummaryProvider<EditTextPreference> { preference ->
+                    if (preference.text.isNullOrBlank()) {
+                        "Missing"
+                    } else {
+                        "Configured"
+                    }
+                }
+            setOnBindEditTextListener { editText ->
+                editText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                editText.typeface = Typeface.MONOSPACE
+                editText.isSingleLine = true
+            }
+        }
+
+        requirePreference<EditTextPreference>(R.string.pref_forced_command_ssh_private_key_pem_key).apply {
+            summaryProvider =
+                Preference.SummaryProvider<EditTextPreference> { preference ->
+                    if (preference.text.isNullOrBlank()) {
+                        "Missing"
+                    } else {
+                        "Configured"
+                    }
+                }
+            setOnBindEditTextListener { editText ->
+                editText.inputType =
+                    InputType.TYPE_CLASS_TEXT or
+                    InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                    InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                editText.typeface = Typeface.MONOSPACE
+                editText.isSingleLine = false
+                editText.minLines = 8
+                editText.maxLines = 16
+                editText.setHorizontallyScrolling(false)
             }
         }
     }

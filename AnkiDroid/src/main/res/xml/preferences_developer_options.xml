@@ -51,6 +51,34 @@
         android:title="Write current partial day JSON now"
         android:summary="Exports the current partial Anki-day snapshot from the current Anki-day start up to now"
         android:key="@string/pref_write_current_partial_anki_day_json_key"/>
+    <PreferenceCategory
+        android:title="Daily progress SSH upload (dev-only)">
+        <Preference
+            android:title="Upload current partial day JSON over SSH now"
+            android:summary="Uploads one JSON snapshot to a fixed forced-command ingest using the config below"
+            android:key="@string/pref_upload_current_partial_anki_day_forced_command_key"/>
+        <EditTextPreference
+            android:key="@string/pref_forced_command_ssh_host_key"
+            android:title="SSH host"
+            android:summary="Target ingest host name or IP" />
+        <EditTextPreference
+            android:key="@string/pref_forced_command_ssh_port_key"
+            android:title="SSH port"
+            android:defaultValue="22"
+            android:summary="Target ingest SSH port" />
+        <EditTextPreference
+            android:key="@string/pref_forced_command_ssh_username_key"
+            android:title="SSH username"
+            android:summary="Dedicated forced-command account name" />
+        <EditTextPreference
+            android:key="@string/pref_forced_command_ssh_known_hosts_key"
+            android:title="known_hosts line"
+            android:summary="Single known_hosts entry for strict host key checking" />
+        <EditTextPreference
+            android:key="@string/pref_forced_command_ssh_private_key_pem_key"
+            android:title="Private key PEM"
+            android:summary="Unencrypted dev key used for public-key auth; stored in app prefs for this pass" />
+    </PreferenceCategory>
     <Preference
         android:title="Write last non-empty completed day JSON now"
         android:summary="Exports the most recent completed Anki-day snapshot with activity before the current partial day"

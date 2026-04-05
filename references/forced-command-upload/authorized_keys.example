@@ -1,0 +1,4 @@
+# Replace the public key body below with the dedicated AnkiDroid upload public key.
+# The client still asks for the original command `ankidroid-daily-progress-upload`,
+# but OpenSSH forces the real ingest script shown here.
+restrict,command="/usr/local/bin/ingest-ankidroid-daily-progress.py --landing-dir /srv/ankidroid-daily-progress/incoming --expected-original-command ankidroid-daily-progress-upload" ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDREPLACE_WITH_REAL_PUBLIC_KEY ankidroid-dev-upload

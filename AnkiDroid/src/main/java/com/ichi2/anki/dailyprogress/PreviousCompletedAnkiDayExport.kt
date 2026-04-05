@@ -8,33 +8,6 @@ import androidx.core.app.ShareCompat
 import androidx.core.content.FileProvider
 import java.io.File
 
-interface AnkiDayExportSink {
-    fun export(snapshot: AnkiDaySnapshot): File
-}
-
-class AnkiDayJsonFileSink(
-    private val context: Context,
-) : AnkiDayExportSink {
-    override fun export(snapshot: AnkiDaySnapshot): File {
-        val outputDirectory =
-            requireNotNull(context.getExternalFilesDir(null)) {
-                "External files directory unavailable"
-            }.resolve("daily-progress")
-                .apply { mkdirs() }
-
-        return outputDirectory
-            .resolve(
-                "${snapshot.windowKind}-${snapshot.windowStartEpochMs}-${snapshot.windowEndEpochMsExclusive}.json",
-            ).apply {
-                writeText(snapshot.toJson().toString(2))
-            }
-    }
-}
-
-class PreviousCompletedAnkiDayJsonFileSink(
-    context: Context,
-) : AnkiDayExportSink by AnkiDayJsonFileSink(context)
-
 object AnkiDayExport {
     fun shareIntent(
         context: Context,
