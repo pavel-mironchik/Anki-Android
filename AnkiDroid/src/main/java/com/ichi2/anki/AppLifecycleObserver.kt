@@ -20,12 +20,18 @@ import android.content.Context
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
+import com.ichi2.anki.dailyprogress.AutomaticCompletedAnkiDayUpload
 import com.ichi2.widget.WidgetStatus
 import timber.log.Timber
 
 class AppLifecycleObserver(
     private val context: Context,
 ) : DefaultLifecycleObserver {
+    override fun onStart(owner: LifecycleOwner) {
+        super.onStart(owner)
+        AutomaticCompletedAnkiDayUpload.trigger(context, reason = "app_foreground")
+    }
+
     override fun onStop(owner: LifecycleOwner) {
         super.onStop(owner)
 

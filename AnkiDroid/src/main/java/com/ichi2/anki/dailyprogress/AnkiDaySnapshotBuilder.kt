@@ -6,8 +6,10 @@ import kotlin.time.Duration.Companion.days
 class AnkiDaySnapshotBuilder {
     private val dayDurationMs = 1.days.inWholeMilliseconds
 
+    fun currentAnkiDayStartEpochMs(collection: Collection): Long = currentDayCutoffEpochMs(collection) - dayDurationMs
+
     fun buildCurrentPartial(collection: Collection): AnkiDaySnapshot {
-        val currentDayCutoffEpochMs = collection.sched.dayCutoff * 1000L
+        val currentDayCutoffEpochMs = currentDayCutoffEpochMs(collection)
         return buildWindowSnapshot(
             collection = collection,
             snapshotType = "partial",
@@ -18,18 +20,16 @@ class AnkiDaySnapshotBuilder {
     }
 
     fun buildPreviousCompleted(collection: Collection): AnkiDaySnapshot {
-        val currentDayCutoffEpochMs = collection.sched.dayCutoff * 1000L
-        return buildWindowSnapshot(
+        val currentDayCutoffEpochMs = currentDayCutoffEpochMs(collection)
+        return buildCompletedWindow(
             collection = collection,
-            snapshotType = "completed",
             windowKind = "previous_completed_anki_day",
             windowStartEpochMs = currentDayCutoffEpochMs - (2 * dayDurationMs),
-            windowEndEpochMsExclusive = currentDayCutoffEpochMs - dayDurationMs,
         )
     }
 
     fun buildLastNonEmptyCompleted(collection: Collection): AnkiDaySnapshot? {
-        val currentDayStartEpochMs = collection.sched.dayCutoff * 1000L - dayDurationMs
+        val currentDayStartEpochMs = currentAnkiDayStartEpochMs(collection)
         val latestReviewEpochMs =
             collection.db.queryLongScalar(
                 """
@@ -47,14 +47,27 @@ class AnkiDaySnapshotBuilder {
 
         val completedDaysBack = (currentDayStartEpochMs - latestReviewEpochMs - 1) / dayDurationMs
         val windowStartEpochMs = currentDayStartEpochMs - ((completedDaysBack + 1) * dayDurationMs)
-        return buildWindowSnapshot(
+        return buildCompletedWindow(
+            collection = collection,
+            windowKind = "last_non_empty_completed_anki_day",
+            windowStartEpochMs = windowStartEpochMs,
+        )
+    }
+
+    fun buildCompletedWindow(
+        collection: Collection,
+        windowStartEpochMs: Long,
+        windowKind: String,
+    ): AnkiDaySnapshot =
+        buildWindowSnapshot(
             collection = collection,
             snapshotType = "completed",
-            windowKind = "last_non_empty_completed_anki_day",
+            windowKind = windowKind,
             windowStartEpochMs = windowStartEpochMs,
             windowEndEpochMsExclusive = windowStartEpochMs + dayDurationMs,
         )
-    }
+
+    private fun currentDayCutoffEpochMs(collection: Collection): Long = collection.sched.dayCutoff * 1000L
 
     private fun buildWindowSnapshot(
         collection: Collection,

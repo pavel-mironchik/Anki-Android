@@ -41,6 +41,7 @@ import com.ichi2.anki.CollectionManager.TR
 import com.ichi2.anki.CollectionManager.withCol
 import com.ichi2.anki.R
 import com.ichi2.anki.cancelSync
+import com.ichi2.anki.dailyprogress.AutomaticCompletedAnkiDayUpload
 import com.ichi2.anki.notifications.NotificationId
 import com.ichi2.anki.setLastSyncTimeToNow
 import com.ichi2.anki.settings.Prefs
@@ -120,6 +121,7 @@ class SyncWorker(
 
         Timber.d("SyncWorker: success")
         setLastSyncTimeToNow()
+        AutomaticCompletedAnkiDayUpload.trigger(applicationContext, reason = "background_sync_success")
         return Result.success()
     }
 

@@ -62,6 +62,14 @@ data class ForcedCommandSshUploadResult(
 class ForcedCommandSshUploadConfigProvider(
     private val context: Context,
 ) {
+    fun isConfigured(): Boolean {
+        val sharedPreferences = context.sharedPrefs()
+        return sharedPreferences.string(R.string.pref_forced_command_ssh_host_key).isNotBlank() &&
+            sharedPreferences.string(R.string.pref_forced_command_ssh_username_key).isNotBlank() &&
+            sharedPreferences.multilineString(R.string.pref_forced_command_ssh_known_hosts_key).isNotBlank() &&
+            sharedPreferences.multilineString(R.string.pref_forced_command_ssh_private_key_pem_key).isNotBlank()
+    }
+
     fun loadOrThrow(): ForcedCommandSshUploadConfig {
         val sharedPreferences = context.sharedPrefs()
         val host = sharedPreferences.string(R.string.pref_forced_command_ssh_host_key).trim()

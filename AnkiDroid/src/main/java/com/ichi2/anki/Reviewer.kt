@@ -70,6 +70,7 @@ import com.ichi2.anki.cardviewer.Gesture
 import com.ichi2.anki.cardviewer.ViewerCommand
 import com.ichi2.anki.common.annotations.NeedsTest
 import com.ichi2.anki.common.time.TimeManager
+import com.ichi2.anki.dailyprogress.AutomaticCompletedAnkiDayUpload
 import com.ichi2.anki.libanki.Card
 import com.ichi2.anki.libanki.CardId
 import com.ichi2.anki.libanki.Collection
@@ -1244,6 +1245,8 @@ open class Reviewer :
         if (timebox != null) {
             dealWithTimeBox(timebox)
         }
+
+        AutomaticCompletedAnkiDayUpload.trigger(this, reason = "legacy_review_answered")
     }
 
     private suspend fun dealWithTimeBox(timebox: Collection.TimeboxReached) {

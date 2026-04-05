@@ -25,6 +25,7 @@ import com.google.android.material.snackbar.Snackbar
 import com.ichi2.anki.CollectionManager.TR
 import com.ichi2.anki.CollectionManager.withCol
 import com.ichi2.anki.common.time.TimeManager
+import com.ichi2.anki.dailyprogress.AutomaticCompletedAnkiDayUpload
 import com.ichi2.anki.dialogs.SyncErrorDialog
 import com.ichi2.anki.observability.ChangeManager.notifySubscribersAllValuesChanged
 import com.ichi2.anki.settings.Prefs
@@ -119,6 +120,7 @@ fun DeckPicker.handleNewSync(
             withCol { notetypes.clearCache() }
             notifySubscribersAllValuesChanged(deckPicker)
             refreshState()
+            AutomaticCompletedAnkiDayUpload.trigger(deckPicker, reason = "foreground_sync_success")
         } finally {
             // Always update last sync time to prevent infinite retry loops
             // when sync fails (e.g., collection too large). See issue #19776

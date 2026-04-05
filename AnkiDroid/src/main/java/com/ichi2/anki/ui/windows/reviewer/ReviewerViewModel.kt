@@ -22,6 +22,7 @@ import anki.frontend.SetSchedulingStatesRequest
 import anki.scheduler.CardAnswer.Rating
 import com.ichi2.anki.AbstractFlashcardViewer
 import com.ichi2.anki.AbstractFlashcardViewer.Companion.RESULT_NO_MORE_CARDS
+import com.ichi2.anki.AnkiDroidApp
 import com.ichi2.anki.CollectionManager.TR
 import com.ichi2.anki.CollectionManager.withCol
 import com.ichi2.anki.Flag
@@ -30,6 +31,7 @@ import com.ichi2.anki.asyncIO
 import com.ichi2.anki.browser.BrowserDestination
 import com.ichi2.anki.cardviewer.SingleCardSide
 import com.ichi2.anki.common.annotations.NeedsTest
+import com.ichi2.anki.dailyprogress.AutomaticCompletedAnkiDayUpload
 import com.ichi2.anki.launchCatchingIO
 import com.ichi2.anki.libanki.Card
 import com.ichi2.anki.libanki.CardId
@@ -508,6 +510,9 @@ class ReviewerViewModel(
                 onLeech(isSuspended)
             }
             updateCurrentCard()
+            if (AnkiDroidApp.isInitialized) {
+                AutomaticCompletedAnkiDayUpload.trigger(AnkiDroidApp.instance, reason = "review_answered")
+            }
         }
     }
 
