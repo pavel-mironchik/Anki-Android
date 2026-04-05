@@ -48,6 +48,14 @@
         android:summary="Corrupts the FSRS parameters of the default deck. Fixed by resetting/optimization"
         android:key="@string/pref_corrupt_fsrs_params"/>
     <Preference
+        android:title="Write current partial day JSON now"
+        android:summary="Exports the current partial Anki-day snapshot from the current Anki-day start up to now"
+        android:key="@string/pref_write_current_partial_anki_day_json_key"/>
+    <Preference
+        android:title="Write last non-empty completed day JSON now"
+        android:summary="Exports the most recent completed Anki-day snapshot with activity before the current partial day"
+        android:key="@string/pref_write_last_non_empty_completed_anki_day_json_key"/>
+    <Preference
         android:title="Write previous day JSON now"
         android:summary="Exports the previous completed Anki-day snapshot to app storage and opens share sheet"
         android:key="@string/pref_write_previous_completed_anki_day_json_key"/>

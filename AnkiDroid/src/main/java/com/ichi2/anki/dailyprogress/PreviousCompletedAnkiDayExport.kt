@@ -8,14 +8,14 @@ import androidx.core.app.ShareCompat
 import androidx.core.content.FileProvider
 import java.io.File
 
-interface PreviousCompletedAnkiDayExportSink {
-    fun export(snapshot: PreviousCompletedAnkiDaySnapshot): File
+interface AnkiDayExportSink {
+    fun export(snapshot: AnkiDaySnapshot): File
 }
 
-class PreviousCompletedAnkiDayJsonFileSink(
+class AnkiDayJsonFileSink(
     private val context: Context,
-) : PreviousCompletedAnkiDayExportSink {
-    override fun export(snapshot: PreviousCompletedAnkiDaySnapshot): File {
+) : AnkiDayExportSink {
+    override fun export(snapshot: AnkiDaySnapshot): File {
         val outputDirectory =
             requireNotNull(context.getExternalFilesDir(null)) {
                 "External files directory unavailable"
@@ -24,14 +24,18 @@ class PreviousCompletedAnkiDayJsonFileSink(
 
         return outputDirectory
             .resolve(
-                "previous-completed-anki-day-${snapshot.windowStartEpochMs}-${snapshot.windowEndEpochMsExclusive}.json",
+                "${snapshot.windowKind}-${snapshot.windowStartEpochMs}-${snapshot.windowEndEpochMsExclusive}.json",
             ).apply {
                 writeText(snapshot.toJson().toString(2))
             }
     }
 }
 
-object PreviousCompletedAnkiDayExport {
+class PreviousCompletedAnkiDayJsonFileSink(
+    context: Context,
+) : AnkiDayExportSink by AnkiDayJsonFileSink(context)
+
+object AnkiDayExport {
     fun shareIntent(
         context: Context,
         file: File,
@@ -51,4 +55,11 @@ object PreviousCompletedAnkiDayExport {
                 }
         return Intent.createChooser(sendIntent, file.name)
     }
+}
+
+object PreviousCompletedAnkiDayExport {
+    fun shareIntent(
+        context: Context,
+        file: File,
+    ): Intent = AnkiDayExport.shareIntent(context, file)
 }

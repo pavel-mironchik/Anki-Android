@@ -28,6 +28,9 @@ import com.ichi2.anki.CollectionManager.withCol
 import com.ichi2.anki.CrashReportService
 import com.ichi2.anki.R
 import com.ichi2.anki.analytics.UsageAnalytics
+import com.ichi2.anki.dailyprogress.AnkiDayExport
+import com.ichi2.anki.dailyprogress.AnkiDayJsonFileSink
+import com.ichi2.anki.dailyprogress.AnkiDaySnapshotBuilder
 import com.ichi2.anki.dailyprogress.PreviousCompletedAnkiDayExport
 import com.ichi2.anki.dailyprogress.PreviousCompletedAnkiDayJsonFileSink
 import com.ichi2.anki.dailyprogress.PreviousCompletedAnkiDaySnapshotBuilder
@@ -113,6 +116,40 @@ class DeveloperOptionsFragment : SettingsFragment() {
                     showThemedToast(requireContext(), "Wrote JSON to ${exportedFile.absolutePath}", false)
                     try {
                         startActivity(PreviousCompletedAnkiDayExport.shareIntent(requireContext(), exportedFile))
+                    } catch (_: ActivityNotFoundException) {
+                        showSnackbar("JSON written to ${exportedFile.absolutePath}")
+                    }
+                }
+            }
+            false
+        }
+        requirePreference<Preference>(R.string.pref_write_current_partial_anki_day_json_key).setOnPreferenceClickListener {
+            launchCatchingTask {
+                withProgress("Exporting current partial Anki-day JSON") {
+                    val snapshot = withCol { AnkiDaySnapshotBuilder().buildCurrentPartial(this) }
+                    val exportedFile = withContext(Dispatchers.IO) { AnkiDayJsonFileSink(requireContext()).export(snapshot) }
+                    showThemedToast(requireContext(), "Wrote JSON to ${exportedFile.absolutePath}", false)
+                    try {
+                        startActivity(AnkiDayExport.shareIntent(requireContext(), exportedFile))
+                    } catch (_: ActivityNotFoundException) {
+                        showSnackbar("JSON written to ${exportedFile.absolutePath}")
+                    }
+                }
+            }
+            false
+        }
+        requirePreference<Preference>(R.string.pref_write_last_non_empty_completed_anki_day_json_key).setOnPreferenceClickListener {
+            launchCatchingTask {
+                withProgress("Exporting last non-empty completed Anki-day JSON") {
+                    val snapshot = withCol { AnkiDaySnapshotBuilder().buildLastNonEmptyCompleted(this) }
+                    if (snapshot == null) {
+                        showSnackbar("No completed Anki-day with activity found before the current partial day")
+                        return@withProgress
+                    }
+                    val exportedFile = withContext(Dispatchers.IO) { AnkiDayJsonFileSink(requireContext()).export(snapshot) }
+                    showThemedToast(requireContext(), "Wrote JSON to ${exportedFile.absolutePath}", false)
+                    try {
+                        startActivity(AnkiDayExport.shareIntent(requireContext(), exportedFile))
                     } catch (_: ActivityNotFoundException) {
                         showSnackbar("JSON written to ${exportedFile.absolutePath}")
                     }
