@@ -60,6 +60,51 @@ class ForcedCommandSshHostKeyParsingTest {
     }
 
     @Test
+    fun `known_hosts parsing exposes expected host token and algorithm for synthesized entry`() {
+        val parsed =
+            "AAAAC3NzaC1lZDI1NTE5AAAAIFakeBase64HostKey".toParsedKnownHostsEntry(
+                host = "51.210.241.242",
+                port = 22,
+            )
+
+        assertEquals("51.210.241.242", parsed.hostToken)
+        assertEquals("ssh-ed25519", parsed.algorithm)
+        assertEquals(
+            "51.210.241.242 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeBase64HostKey",
+            parsed.knownHostsEntry,
+        )
+    }
+
+    @Test
+    fun `legacy known_hosts parsing exposes embedded host token and algorithm`() {
+        val parsed =
+            " [example.org]:2222   ssh-ed25519   AAAAC3NzaC1lZDI1NTE5AAAAIFakeBase64HostKey   saved-comment  ".toParsedKnownHostsEntry(
+                host = "ignored.example",
+                port = 22,
+            )
+
+        assertEquals("[example.org]:2222", parsed.hostToken)
+        assertEquals("ssh-ed25519", parsed.algorithm)
+        assertEquals(
+            "[example.org]:2222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeBase64HostKey saved-comment",
+            parsed.knownHostsEntry,
+        )
+    }
+
+    @Test
+    fun `invalid short known_hosts line is rejected early`() {
+        val exception =
+            assertFailsWith<IllegalArgumentException> {
+                "example.org ssh-ed25519".toParsedKnownHostsEntry(host = "51.210.241.242", port = 22)
+            }
+
+        assertEquals(
+            "Forced-command SSH host key must be base64 only, algorithm + base64, or a full known_hosts line",
+            exception.message,
+        )
+    }
+
+    @Test
     fun `algorithm without base64 is rejected early`() {
         val exception =
             assertFailsWith<IllegalArgumentException> {

@@ -9,6 +9,7 @@ import com.jcraft.jsch.JSchException
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.lang.reflect.InvocationTargetException
 
 private const val DEFAULT_SSH_PORT = 22
 private const val SSH_CONNECT_TIMEOUT_MS = 10_000
@@ -41,8 +42,16 @@ data class ForcedCommandSshUploadConfig(
     val port: Int,
     val username: String,
     val knownHostsEntry: String,
+    val knownHostsHostToken: String,
+    val hostKeyAlgorithm: String,
     val privateKeyPem: String,
     val originalCommand: String = FORCED_COMMAND_UPLOAD_ORIGINAL_COMMAND,
+)
+
+internal data class ParsedKnownHostsEntry(
+    val knownHostsEntry: String,
+    val hostToken: String,
+    val algorithm: String,
 )
 
 data class ForcedCommandSshUploadResult(
@@ -88,9 +97,9 @@ class ForcedCommandSshUploadConfigProvider(
             throw ForcedCommandSshUploadException("Forced-command SSH port must be between 1 and 65535")
         }
 
-        val knownHostsEntry =
+        val parsedKnownHostsEntry =
             try {
-                configuredHostKey.toKnownHostsEntry(host, port)
+                configuredHostKey.toParsedKnownHostsEntry(host, port)
             } catch (exception: IllegalArgumentException) {
                 throw ForcedCommandSshUploadException(exception.message ?: "Invalid forced-command SSH host key", exception)
             }
@@ -99,7 +108,9 @@ class ForcedCommandSshUploadConfigProvider(
             host = host,
             port = port,
             username = username,
-            knownHostsEntry = knownHostsEntry,
+            knownHostsEntry = parsedKnownHostsEntry.knownHostsEntry,
+            knownHostsHostToken = parsedKnownHostsEntry.hostToken,
+            hostKeyAlgorithm = parsedKnownHostsEntry.algorithm,
             privateKeyPem = privateKeyPem,
         )
     }
@@ -113,27 +124,50 @@ class ForcedCommandSshUploadConfigProvider(
             .trim()
 }
 
-internal fun String.toKnownHostsEntry(
+internal fun String.toParsedKnownHostsEntry(
     host: String,
     port: Int,
-): String {
+): ParsedKnownHostsEntry {
     val normalized = inlineWhitespaceNormalized()
     val tokens = normalized.split(INLINE_WHITESPACE_REGEX).filter(String::isNotBlank)
+    val expectedHostToken = knownHostsHost(host, port)
 
     return when {
         tokens.isEmpty() -> throw IllegalArgumentException("Missing forced-command SSH host key")
         tokens.size == 1 && tokens.first() in SUPPORTED_SSH_HOST_KEY_ALGORITHMS -> {
             throw IllegalArgumentException("Forced-command SSH host key is missing the base64 key body")
         }
-        tokens.size == 1 -> hostKeyEntryFor(host, port, DEFAULT_SSH_HOST_KEY_ALGORITHM, tokens.first())
+        tokens.size == 1 ->
+            ParsedKnownHostsEntry(
+                knownHostsEntry = hostKeyEntryFor(host, port, DEFAULT_SSH_HOST_KEY_ALGORITHM, tokens.first()),
+                hostToken = expectedHostToken,
+                algorithm = DEFAULT_SSH_HOST_KEY_ALGORITHM,
+            )
         tokens.first() in SUPPORTED_SSH_HOST_KEY_ALGORITHMS -> {
             val algorithm = tokens.first()
             val base64 = tokens.getOrNull(1) ?: throw IllegalArgumentException("Forced-command SSH host key is missing the base64 key body")
-            hostKeyEntryFor(host, port, algorithm, base64)
+            ParsedKnownHostsEntry(
+                knownHostsEntry = hostKeyEntryFor(host, port, algorithm, base64),
+                hostToken = expectedHostToken,
+                algorithm = algorithm,
+            )
         }
-        else -> normalized
+        tokens.size >= 3 ->
+            ParsedKnownHostsEntry(
+                knownHostsEntry = normalized,
+                hostToken = tokens.first(),
+                algorithm = tokens[1],
+            )
+        else -> throw IllegalArgumentException(
+            "Forced-command SSH host key must be base64 only, algorithm + base64, or a full known_hosts line",
+        )
     }
 }
+
+internal fun String.toKnownHostsEntry(
+    host: String,
+    port: Int,
+): String = toParsedKnownHostsEntry(host, port).knownHostsEntry
 
 internal fun knownHostsHost(
     host: String,
@@ -156,10 +190,48 @@ private fun hostKeyEntryFor(
     base64: String,
 ): String = "${knownHostsHost(host, port)} $algorithm $base64"
 
+private fun hostKeyServerProposalFor(hostKeyAlgorithm: String): String =
+    when (hostKeyAlgorithm) {
+        "ssh-rsa" -> "rsa-sha2-512,rsa-sha2-256,ssh-rsa"
+        else -> hostKeyAlgorithm
+    }
+
+private fun verifyJschAlgorithmAvailable(algorithm: String) {
+    val implementationClassName =
+        JSch.getConfig(algorithm)
+            ?: throw ForcedCommandSshUploadException("Forced-command SSH host key algorithm '$algorithm' is not mapped by JSch")
+
+    try {
+        val implementationClass = Class.forName(implementationClassName)
+        val implementation = implementationClass.getDeclaredConstructor().newInstance()
+        implementationClass.methods
+            .firstOrNull { method -> method.name == "init" && method.parameterCount == 0 }
+            ?.invoke(implementation)
+    } catch (exception: InvocationTargetException) {
+        val cause = exception.targetException ?: exception
+        throw ForcedCommandSshUploadException(
+            "Forced-command SSH host key algorithm '$algorithm' is unavailable in this runtime (JSch impl=$implementationClassName): ${cause.message ?: cause.javaClass.simpleName}",
+            cause,
+        )
+    } catch (exception: ReflectiveOperationException) {
+        throw ForcedCommandSshUploadException(
+            "Forced-command SSH host key algorithm '$algorithm' is unavailable in this runtime (JSch impl=$implementationClassName): ${exception.message ?: exception.javaClass.simpleName}",
+            exception,
+        )
+    } catch (exception: LinkageError) {
+        throw ForcedCommandSshUploadException(
+            "Forced-command SSH host key algorithm '$algorithm' is unavailable in this runtime (JSch impl=$implementationClassName): ${exception.message ?: exception.javaClass.simpleName}",
+            exception,
+        )
+    }
+}
+
 class ForcedCommandSshAnkiDayUploadSink(
     private val config: ForcedCommandSshUploadConfig,
 ) : AnkiDayPayloadSink<ForcedCommandSshUploadResult> {
     override fun send(payload: AnkiDaySnapshotPayload): ForcedCommandSshUploadResult {
+        verifyJschAlgorithmAvailable(config.hostKeyAlgorithm)
+
         val jsch = JSch()
         try {
             jsch.setKnownHosts(ByteArrayInputStream((config.knownHostsEntry + "\n").toByteArray(Charsets.UTF_8)))
@@ -179,6 +251,7 @@ class ForcedCommandSshAnkiDayUploadSink(
         val session = jsch.getSession(config.username, config.host, config.port)
         session.setConfig("StrictHostKeyChecking", "yes")
         session.setConfig("PreferredAuthentications", "publickey")
+        session.setConfig("server_host_key", hostKeyServerProposalFor(config.hostKeyAlgorithm))
 
         var channel: ChannelExec? = null
         return try {
@@ -218,7 +291,7 @@ class ForcedCommandSshAnkiDayUploadSink(
             )
         } catch (exception: JSchException) {
             throw ForcedCommandSshUploadException(
-                "Forced-command SSH connection failed: ${exception.message ?: "unknown SSH error"}",
+                "Forced-command SSH connection failed: ${exception.message ?: "unknown SSH error"} (expected_host_token=${config.knownHostsHostToken}, expected_algorithm=${config.hostKeyAlgorithm})",
                 exception,
             )
         } catch (exception: IOException) {

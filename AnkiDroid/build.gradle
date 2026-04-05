@@ -436,6 +436,7 @@ dependencies {
     implementation libs.mikehardy.google.analytics.java7
     implementation libs.okhttp
     implementation libs.mwiede.jsch
+    runtimeOnly libs.bouncycastle.bcprov
     implementation libs.slf4j.timber
     implementation libs.jakewharton.timber
     implementation libs.jsoup
