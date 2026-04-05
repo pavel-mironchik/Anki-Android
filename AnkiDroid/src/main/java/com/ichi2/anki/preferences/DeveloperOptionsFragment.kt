@@ -15,6 +15,7 @@
  */
 package com.ichi2.anki.preferences
 
+import android.content.ActivityNotFoundException
 import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.edit
@@ -27,6 +28,9 @@ import com.ichi2.anki.CollectionManager.withCol
 import com.ichi2.anki.CrashReportService
 import com.ichi2.anki.R
 import com.ichi2.anki.analytics.UsageAnalytics
+import com.ichi2.anki.dailyprogress.PreviousCompletedAnkiDayExport
+import com.ichi2.anki.dailyprogress.PreviousCompletedAnkiDayJsonFileSink
+import com.ichi2.anki.dailyprogress.PreviousCompletedAnkiDaySnapshotBuilder
 import com.ichi2.anki.dialogs.TtsVoicesDialogFragment
 import com.ichi2.anki.launchCatchingTask
 import com.ichi2.anki.settings.Prefs
@@ -97,6 +101,22 @@ class DeveloperOptionsFragment : SettingsFragment() {
                     decks.save(defaultConfig)
                 }
                 showThemedToast(requireContext(), "Parameters corrupted. Optimize to fix", false)
+            }
+            false
+        }
+        requirePreference<Preference>(R.string.pref_write_previous_completed_anki_day_json_key).setOnPreferenceClickListener {
+            launchCatchingTask {
+                withProgress("Exporting previous completed Anki-day JSON") {
+                    val snapshot = withCol { PreviousCompletedAnkiDaySnapshotBuilder().build(this) }
+                    val exportedFile =
+                        withContext(Dispatchers.IO) { PreviousCompletedAnkiDayJsonFileSink(requireContext()).export(snapshot) }
+                    showThemedToast(requireContext(), "Wrote JSON to ${exportedFile.absolutePath}", false)
+                    try {
+                        startActivity(PreviousCompletedAnkiDayExport.shareIntent(requireContext(), exportedFile))
+                    } catch (_: ActivityNotFoundException) {
+                        showSnackbar("JSON written to ${exportedFile.absolutePath}")
+                    }
+                }
             }
             false
         }

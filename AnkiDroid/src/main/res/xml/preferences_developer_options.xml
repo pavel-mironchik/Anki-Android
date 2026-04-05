@@ -48,6 +48,10 @@
         android:summary="Corrupts the FSRS parameters of the default deck. Fixed by resetting/optimization"
         android:key="@string/pref_corrupt_fsrs_params"/>
     <Preference
+        android:title="Write previous day JSON now"
+        android:summary="Exports the previous completed Anki-day snapshot to app storage and opens share sheet"
+        android:key="@string/pref_write_previous_completed_anki_day_json_key"/>
+    <Preference
         android:title="Set Database to pre-Scoped Storage default"
         android:summary="Touch here to set the database path to /storage/emulated/0/AnkiDroid"
         android:key="@string/pref_set_database_path_debug_key"/>

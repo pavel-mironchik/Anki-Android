@@ -227,6 +227,7 @@
     <string name="pref_set_database_path_debug_key">debug_set_database_path</string>
     <string name="pref_lock_database_key">debug_lock_database</string>
     <string name="pref_corrupt_fsrs_params">debug_corrupt_fsrs_params</string>
+    <string name="pref_write_previous_completed_anki_day_json_key">writePreviousCompletedAnkiDayJson</string>
     <string name="new_congrats_screen_pref_key">new_congrats_screen</string>
     <string name="new_reviewer_options_key">newReviewerOptions</string>
     <string name="pref_browser_find_replace">browserFindReplace</string>
