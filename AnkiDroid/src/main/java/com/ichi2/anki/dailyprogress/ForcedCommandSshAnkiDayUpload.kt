@@ -13,6 +13,21 @@ import java.io.IOException
 private const val DEFAULT_SSH_PORT = 22
 private const val SSH_CONNECT_TIMEOUT_MS = 10_000
 private const val SSH_COMMAND_TIMEOUT_MS = 15_000
+private const val DEFAULT_SSH_HOST_KEY_ALGORITHM = "ssh-ed25519"
+
+private val SUPPORTED_SSH_HOST_KEY_ALGORITHMS =
+    setOf(
+        "ssh-ed25519",
+        "ssh-rsa",
+        "ssh-dss",
+        "ecdsa-sha2-nistp256",
+        "ecdsa-sha2-nistp384",
+        "ecdsa-sha2-nistp521",
+        "sk-ssh-ed25519@openssh.com",
+        "sk-ecdsa-sha2-nistp256@openssh.com",
+    )
+
+private val INLINE_WHITESPACE_REGEX = Regex("\\s+")
 
 const val FORCED_COMMAND_UPLOAD_ORIGINAL_COMMAND = "ankidroid-daily-progress-upload"
 
@@ -43,7 +58,7 @@ class ForcedCommandSshUploadConfigProvider(
         val host = sharedPreferences.string(R.string.pref_forced_command_ssh_host_key).trim()
         val rawPort = sharedPreferences.string(R.string.pref_forced_command_ssh_port_key).trim()
         val username = sharedPreferences.string(R.string.pref_forced_command_ssh_username_key).trim()
-        val knownHostsEntry = sharedPreferences.multilineString(R.string.pref_forced_command_ssh_known_hosts_key)
+        val configuredHostKey = sharedPreferences.multilineString(R.string.pref_forced_command_ssh_known_hosts_key)
         val privateKeyPem = sharedPreferences.multilineString(R.string.pref_forced_command_ssh_private_key_pem_key)
 
         if (host.isBlank()) {
@@ -52,8 +67,8 @@ class ForcedCommandSshUploadConfigProvider(
         if (username.isBlank()) {
             throw ForcedCommandSshUploadException("Missing forced-command SSH username")
         }
-        if (knownHostsEntry.isBlank()) {
-            throw ForcedCommandSshUploadException("Missing forced-command SSH known_hosts entry")
+        if (configuredHostKey.isBlank()) {
+            throw ForcedCommandSshUploadException("Missing forced-command SSH host key")
         }
         if (privateKeyPem.isBlank()) {
             throw ForcedCommandSshUploadException("Missing forced-command SSH private key PEM")
@@ -73,6 +88,13 @@ class ForcedCommandSshUploadConfigProvider(
             throw ForcedCommandSshUploadException("Forced-command SSH port must be between 1 and 65535")
         }
 
+        val knownHostsEntry =
+            try {
+                configuredHostKey.toKnownHostsEntry(host, port)
+            } catch (exception: IllegalArgumentException) {
+                throw ForcedCommandSshUploadException(exception.message ?: "Invalid forced-command SSH host key", exception)
+            }
+
         return ForcedCommandSshUploadConfig(
             host = host,
             port = port,
@@ -91,6 +113,49 @@ class ForcedCommandSshUploadConfigProvider(
             .trim()
 }
 
+internal fun String.toKnownHostsEntry(
+    host: String,
+    port: Int,
+): String {
+    val normalized = inlineWhitespaceNormalized()
+    val tokens = normalized.split(INLINE_WHITESPACE_REGEX).filter(String::isNotBlank)
+
+    return when {
+        tokens.isEmpty() -> throw IllegalArgumentException("Missing forced-command SSH host key")
+        tokens.size == 1 && tokens.first() in SUPPORTED_SSH_HOST_KEY_ALGORITHMS -> {
+            throw IllegalArgumentException("Forced-command SSH host key is missing the base64 key body")
+        }
+        tokens.size == 1 -> hostKeyEntryFor(host, port, DEFAULT_SSH_HOST_KEY_ALGORITHM, tokens.first())
+        tokens.first() in SUPPORTED_SSH_HOST_KEY_ALGORITHMS -> {
+            val algorithm = tokens.first()
+            val base64 = tokens.getOrNull(1) ?: throw IllegalArgumentException("Forced-command SSH host key is missing the base64 key body")
+            hostKeyEntryFor(host, port, algorithm, base64)
+        }
+        else -> normalized
+    }
+}
+
+internal fun knownHostsHost(
+    host: String,
+    port: Int,
+): String =
+    if (port == DEFAULT_SSH_PORT) {
+        host
+    } else {
+        "[$host]:$port"
+    }
+
+private fun String.inlineWhitespaceNormalized(): String =
+    replace(INLINE_WHITESPACE_REGEX, " ")
+        .trim()
+
+private fun hostKeyEntryFor(
+    host: String,
+    port: Int,
+    algorithm: String,
+    base64: String,
+): String = "${knownHostsHost(host, port)} $algorithm $base64"
+
 class ForcedCommandSshAnkiDayUploadSink(
     private val config: ForcedCommandSshUploadConfig,
 ) : AnkiDayPayloadSink<ForcedCommandSshUploadResult> {
@@ -106,7 +171,7 @@ class ForcedCommandSshAnkiDayUploadSink(
             )
         } catch (exception: JSchException) {
             throw ForcedCommandSshUploadException(
-                "Invalid forced-command SSH key or known_hosts configuration: ${exception.message ?: "unknown error"}",
+                "Invalid forced-command SSH key or host key configuration: ${exception.message ?: "unknown error"}",
                 exception,
             )
         }
