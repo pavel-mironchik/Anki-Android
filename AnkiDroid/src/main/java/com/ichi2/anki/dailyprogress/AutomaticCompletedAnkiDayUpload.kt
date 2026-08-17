@@ -25,6 +25,7 @@ import com.ichi2.anki.preferences.sharedPrefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import kotlin.time.Duration.Companion.days
 
@@ -109,11 +110,22 @@ object AutomaticCompletedAnkiDayUpload {
     @Volatile
     private var nextRetryNotBeforeEpochMs = 0L
 
-    fun trigger(
+    internal fun trigger(
         context: Context,
         reason: String,
+        onFinished: ((AutomaticCompletedAnkiDayUploadOutcome) -> Unit)? = null,
     ) {
-        if (System.currentTimeMillis() < nextRetryNotBeforeEpochMs) {
+        val now = System.currentTimeMillis()
+        if (now < nextRetryNotBeforeEpochMs) {
+            if (onFinished != null) {
+                AnkiDroidApp.applicationScope.launch(Dispatchers.Main.immediate) {
+                    onFinished(
+                        AutomaticCompletedAnkiDayUploadOutcome.Skipped.RetryCooldown(
+                            retryAfterMs = nextRetryNotBeforeEpochMs - now,
+                        ),
+                    )
+                }
+            }
             return
         }
 
@@ -121,35 +133,80 @@ object AutomaticCompletedAnkiDayUpload {
         AnkiDroidApp.applicationScope.launch(Dispatchers.IO) {
             if (!runMutex.tryLock()) {
                 Timber.v("Automatic completed Anki-day upload already running; skipping trigger=%s", reason)
+                if (onFinished != null) {
+                    withContext(Dispatchers.Main.immediate) {
+                        onFinished(AutomaticCompletedAnkiDayUploadOutcome.Skipped.AlreadyRunning)
+                    }
+                }
                 return@launch
             }
 
+            var outcome: AutomaticCompletedAnkiDayUploadOutcome = AutomaticCompletedAnkiDayUploadOutcome.Skipped.NothingPending
             try {
-                when (AutomaticCompletedAnkiDayUploader(appContext).run(reason)) {
-                    AutomaticCompletedAnkiDayUploadOutcome.FAILED_RETRYABLE -> {
-                        nextRetryNotBeforeEpochMs = System.currentTimeMillis() + FAILED_UPLOAD_RETRY_COOLDOWN_MS
-                    }
-                    AutomaticCompletedAnkiDayUploadOutcome.SKIPPED,
-                    AutomaticCompletedAnkiDayUploadOutcome.PROGRESSED,
-                    -> {
-                        if (nextRetryNotBeforeEpochMs <= System.currentTimeMillis()) {
-                            nextRetryNotBeforeEpochMs = 0L
-                        }
-                    }
-                }
+                outcome = AutomaticCompletedAnkiDayUploader(appContext).run(reason)
             } catch (throwable: Throwable) {
                 Timber.w(throwable, "Automatic completed Anki-day upload failed (trigger=%s)", reason)
+                outcome =
+                    AutomaticCompletedAnkiDayUploadOutcome.FailedRetryable(
+                        throwable.localizedMessage ?: throwable.javaClass.simpleName,
+                    )
             } finally {
+                applyRetryCooldown(outcome)
                 runMutex.unlock()
+            }
+
+            Timber.i("Automatic completed Anki-day upload finished trigger=%s outcome=%s", reason, outcome)
+
+            if (onFinished != null) {
+                withContext(Dispatchers.Main.immediate) {
+                    onFinished(outcome)
+                }
+            }
+        }
+    }
+
+    private fun applyRetryCooldown(outcome: AutomaticCompletedAnkiDayUploadOutcome) {
+        when (outcome) {
+            is AutomaticCompletedAnkiDayUploadOutcome.FailedRetryable -> {
+                nextRetryNotBeforeEpochMs = System.currentTimeMillis() + FAILED_UPLOAD_RETRY_COOLDOWN_MS
+            }
+            is AutomaticCompletedAnkiDayUploadOutcome.Skipped,
+            is AutomaticCompletedAnkiDayUploadOutcome.Progressed,
+            -> {
+                if (nextRetryNotBeforeEpochMs <= System.currentTimeMillis()) {
+                    nextRetryNotBeforeEpochMs = 0L
+                }
             }
         }
     }
 }
 
-private enum class AutomaticCompletedAnkiDayUploadOutcome {
-    SKIPPED,
-    PROGRESSED,
-    FAILED_RETRYABLE,
+internal sealed interface AutomaticCompletedAnkiDayUploadOutcome {
+    sealed interface Skipped : AutomaticCompletedAnkiDayUploadOutcome {
+        data object AlreadyRunning : Skipped
+
+        data class RetryCooldown(
+            val retryAfterMs: Long,
+        ) : Skipped
+
+        data object NotConfigured : Skipped
+
+        data class InvalidConfiguration(
+            val userFacingMessage: String,
+        ) : Skipped
+
+        data object NothingPending : Skipped
+
+        data object NoActiveStudyToUpload : Skipped
+    }
+
+    data class Progressed(
+        val uploadedWindowCount: Int,
+    ) : AutomaticCompletedAnkiDayUploadOutcome
+
+    data class FailedRetryable(
+        val userFacingMessage: String,
+    ) : AutomaticCompletedAnkiDayUploadOutcome
 }
 
 private class AutomaticCompletedAnkiDayUploader(
@@ -161,7 +218,7 @@ private class AutomaticCompletedAnkiDayUploader(
     suspend fun run(reason: String): AutomaticCompletedAnkiDayUploadOutcome {
         val configProvider = ForcedCommandSshUploadConfigProvider(context)
         if (!configProvider.isConfigured()) {
-            return AutomaticCompletedAnkiDayUploadOutcome.SKIPPED
+            return AutomaticCompletedAnkiDayUploadOutcome.Skipped.NotConfigured
         }
 
         val config =
@@ -169,7 +226,9 @@ private class AutomaticCompletedAnkiDayUploader(
                 configProvider.loadOrThrow()
             } catch (exception: ForcedCommandSshUploadException) {
                 Timber.i("Automatic completed Anki-day upload skipped due to invalid SSH config: %s", exception.message)
-                return AutomaticCompletedAnkiDayUploadOutcome.SKIPPED
+                return AutomaticCompletedAnkiDayUploadOutcome.Skipped.InvalidConfiguration(
+                    exception.message ?: "Invalid forced-command SSH configuration",
+                )
             }
         val uploadSink = ForcedCommandSshAnkiDayUploadSink(config)
         val currentDayStartEpochMs = withCol { snapshotBuilder.currentAnkiDayStartEpochMs(this) }
@@ -179,7 +238,7 @@ private class AutomaticCompletedAnkiDayUploader(
                 currentDayStartEpochMs = currentDayStartEpochMs,
             )
         if (pendingWindows.isEmpty()) {
-            return AutomaticCompletedAnkiDayUploadOutcome.SKIPPED
+            return AutomaticCompletedAnkiDayUploadOutcome.Skipped.NothingPending
         }
 
         Timber.i(
@@ -190,6 +249,7 @@ private class AutomaticCompletedAnkiDayUploader(
         )
 
         var progressed = false
+        var uploadedWindowCount = 0
 
         for (window in pendingWindows) {
             val snapshot =
@@ -212,6 +272,7 @@ private class AutomaticCompletedAnkiDayUploader(
                 val result = uploadSink.send(payload)
                 progressStore.markWindowHandled(window.endEpochMsExclusive)
                 progressed = true
+                uploadedWindowCount += 1
                 Timber.i(
                     "Automatic completed Anki-day upload sent %s trigger=%s receipt=%s",
                     result.uploadedFileName,
@@ -226,14 +287,18 @@ private class AutomaticCompletedAnkiDayUploader(
                     window.endEpochMsExclusive,
                     reason,
                 )
-                return AutomaticCompletedAnkiDayUploadOutcome.FAILED_RETRYABLE
+                return AutomaticCompletedAnkiDayUploadOutcome.FailedRetryable(
+                    exception.message ?: "Forced-command SSH upload failed",
+                )
             }
         }
 
-        return if (progressed) {
-            AutomaticCompletedAnkiDayUploadOutcome.PROGRESSED
+        return if (uploadedWindowCount > 0) {
+            AutomaticCompletedAnkiDayUploadOutcome.Progressed(uploadedWindowCount = uploadedWindowCount)
+        } else if (progressed) {
+            AutomaticCompletedAnkiDayUploadOutcome.Skipped.NoActiveStudyToUpload
         } else {
-            AutomaticCompletedAnkiDayUploadOutcome.SKIPPED
+            AutomaticCompletedAnkiDayUploadOutcome.Skipped.NothingPending
         }
     }
 }

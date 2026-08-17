@@ -59,4 +59,18 @@
     <!-- Deck Picker Sync Icon -->
     <string name="sync_menu_title_one_way_sync">Sync (one-way)</string>
     <string name="sync_menu_title_no_account">Sync (log in)</string>
+
+    <string name="completed_anki_day_upload_notification_title">Uploaded to your server</string>
+    <string name="completed_anki_day_upload_notification_failed_title">Server upload failed</string>
+    <string name="completed_anki_day_upload_failed">Could not upload to your server: %1$s</string>
+    <string name="completed_anki_day_upload_skipped_already_running">Server upload is already running</string>
+    <string name="completed_anki_day_upload_skipped_retry_cooldown">Server upload is paused after the last failure. Try again in about %1$d min</string>
+    <string name="completed_anki_day_upload_skipped_not_configured">Server upload is not configured on this device</string>
+    <string name="completed_anki_day_upload_skipped_invalid_config">Server upload is configured incorrectly: %1$s</string>
+    <string name="completed_anki_day_upload_skipped_nothing_pending">Nothing new to upload yet. The latest study can upload after the Anki day closes.</string>
+    <string name="completed_anki_day_upload_skipped_no_active_study">Nothing was uploaded. Completed days since the last check had no studied cards.</string>
+    <plurals name="completed_anki_day_upload_success">
+        <item quantity="one">Uploaded %d completed Anki-day to your server</item>
+        <item quantity="other">Uploaded %d completed Anki-days to your server</item>
+    </plurals>
 </resources>
